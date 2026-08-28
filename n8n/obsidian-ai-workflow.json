@@ -1,0 +1,118 @@
+{
+  "name": "ChatGPT to Obsidian",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "obsidian-ai-import",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "11111111-1111-4111-8111-111111111111",
+      "name": "Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nif (items.length !== 1) {\n  throw new Error('Expected exactly one webhook request.');\n}\n\nconst input = items[0].json;\n\n// In Webhook nodes, the JSON payload is usually contained in the body.\n// The fallback also supports manual testing of the Code node.\nconst body = input.body ?? input;\n\nconst rawTitle = typeof body.title === 'string'\n  ? body.title.trim()\n  : '';\n\nconst content = typeof body.content === 'string'\n  ? body.content.trim()\n  : '';\n\n// Empty notes are not allowed.\nif (!content) {\n  throw new Error('The content field is required and cannot be empty.');\n}\n\n// Optional safety limit: approximately 1 MB of text.\nif (content.length > 1_000_000) {\n  throw new Error('The note content is too large.');\n}\n\n// Use a safe default when no title is provided.\nlet safeTitle = rawTitle || 'Untitled Note';\n\n// Remove characters that are problematic in Windows filenames\n// or could be used for path traversal.\nsafeTitle = safeTitle\n  .replace(/[<>:\"/\\\\|?*\\u0000-\\u001F]/g, ' ')\n  .replace(/\\.\\./g, ' ')\n  .replace(/\\s+/g, ' ')\n  .replace(/[.\\s]+$/g, '')\n  .trim();\n\n// Limit the filename length.\nsafeTitle = safeTitle.slice(0, 120).trim();\n\nif (!safeTitle) {\n  safeTitle = 'Untitled Note';\n}\n\n// Avoid reserved Windows filenames.\nconst reservedWindowsNames =\n  /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;\n\nif (reservedWindowsNames.test(safeTitle)) {\n  safeTitle = `Note ${safeTitle}`;\n}\n\n// The destination folder is fixed and never derived from user input.\nconst allowedFolder = '00 Inbox/AI Imports';\nconst filename = `${safeTitle}.md`;\nconst vaultPath = `${allowedFolder}/${filename}`;\n\nreturn [\n  {\n    json: {\n      title: safeTitle,\n      content,\n      filename,\n      vaultPath,\n      allowedFolder,\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "22222222-2222-4222-8222-222222222222",
+      "name": "Validate and Prepare Note"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ 'https://host.docker.internal:27124/vault/' + $json.vaultPath.split('/').map(encodeURIComponent).join('/') }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/markdown",
+        "body": "={{ $json.content }}",
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        416,
+        0
+      ],
+      "id": "33333333-3333-4333-8333-333333333333",
+      "name": "Write Note to Obsidian"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{\n  {\n    success: true,\n    message: \"Note saved successfully to Obsidian.\",\n    path: $(\"Validate and Prepare Note\").item.json.vaultPath,\n    title: $(\"Validate and Prepare Note\").item.json.title\n  }\n}}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        624,
+        0
+      ],
+      "id": "44444444-4444-4444-8444-444444444444",
+      "name": "Return Success Response"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate and Prepare Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate and Prepare Note": {
+      "main": [
+        [
+          {
+            "node": "Write Note to Obsidian",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Note to Obsidian": {
+      "main": [
+        [
+          {
+            "node": "Return Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "nodeGroups": [],
+  "tags": []
+}
