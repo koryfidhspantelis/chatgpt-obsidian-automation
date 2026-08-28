@@ -1,0 +1,77 @@
+openapi: 3.1.0
+
+info:
+  title: Obsidian AI Import API
+  description: Saves a Markdown study note into the restricted Obsidian AI Imports folder through an n8n webhook.
+  version: 1.0.0
+
+servers:
+  - url: https://YOUR_PUBLIC_N8N_URL
+
+paths:
+  /webhook/obsidian-ai-import:
+    post:
+      operationId: saveObsidianNote
+      summary: Save a Markdown note to Obsidian
+      description: Saves one Markdown note into the fixed folder 00 Inbox/AI Imports through the connected n8n workflow.
+
+      security:
+        - ObsidianWebhookSecret: []
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - title
+                - content
+              properties:
+                title:
+                  type: string
+                  description: Short descriptive filename title without a path or extension.
+                  minLength: 1
+                  maxLength: 120
+                content:
+                  type: string
+                  description: Complete Markdown content of the note.
+                  minLength: 1
+                  maxLength: 1000000
+
+      responses:
+        "200":
+          description: The note was saved successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  path:
+                    type: string
+                    description: Vault-relative path where the note was saved.
+                  title:
+                    type: string
+                    description: Sanitized note title used for the filename.
+
+        "400":
+          description: Invalid request or empty content.
+
+        "401":
+          description: Missing or invalid authentication.
+
+        "500":
+          description: Internal server error.
+
+components:
+  securitySchemes:
+    ObsidianWebhookSecret:
+      type: apiKey
+      in: header
+      name: X-Obsidian-Webhook-Secret
+      description: Custom webhook secret header. Set the actual secret value only in the Custom GPT Action authentication settings, never in this public schema.
